@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: sentiment-model
-        version: v1.0.0
+        version: v1.1.0
     spec:
       containers:
         - name: sentiment-model
