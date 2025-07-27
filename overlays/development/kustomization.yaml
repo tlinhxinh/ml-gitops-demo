@@ -28,6 +28,6 @@ configMapGenerator:
   - name: dev-config
     literals:
       - LOG_LEVEL=DEBUG
-      - CACHE_TTL=60
+      - CACHE_TTL=100
       - MAX_REQUESTS_PER_MINUTE=1000
 
