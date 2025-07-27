@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-model
+spec:
+  template:
+    spec:
+      containers:
+      - name: sentiment-model
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "WARNING"
+        - name: MODEL_CACHE_SIZE
+          value: "1000"
+        # M3 Mac production optimizations
+        - name: PYTORCH_ENABLE_MPS_FALLBACK
+          value: "1"
+        - name: OMP_NUM_THREADS
+          value: "8"  # More threads for production
+        - name: MALLOC_ARENA_MAX
+          value: "2"  # Reduce memory fragmentation
+        resources:
+          requests:
+            memory: "2Gi"    # Higher base for production on M3
+            cpu: "1000m"     # Leverage M3 performance cores
+          limits:
+            memory: "4Gi"    # M3 handles larger memory efficiently
+            cpu: "2000m"     # Burst capacity for high load

@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+
+resources:
+  - ../../base
+
+# Use labels instead of deprecated commonLabels
+labels:
+  - includeSelectors: false  # Don't modify selectors in overlays
+    pairs:
+      environment: production
+      deployment-type: manual
+      monitoring: enhanced
+      compliance: required
+
+patches:
+  - target:
+      kind: Deployment
+      name: sentiment-model
+    path: production-patch.yaml
+
+replicas:
+  - name: sentiment-model
+    count: 3
+
+# Production-specific configurations
+configMapGenerator:
+  - name: prod-config
+    literals:
+      - LOG_LEVEL=WARNING
+      - CACHE_TTL=300
+      - MAX_REQUESTS_PER_MINUTE=5000
+      - ENABLE_METRICS=true
+      - ALERT_WEBHOOK=https://alerts.company.com/ml-models
+
+# Production secrets (create these separately for security)
+secretGenerator:
+  - name: prod-secrets
+    literals:
+      - API_KEY=7f3a6b92c1de4384be2fa9a580d7ec3a
+    type: Opaque

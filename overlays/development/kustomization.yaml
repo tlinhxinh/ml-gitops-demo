@@ -1,0 +1,33 @@
+#file: noinspection KubernetesUnknownValues
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: development
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: true
+    pairs:
+      environment: development
+      deployment-type: auto
+      monitoring: enabled
+
+patches:
+  - target:
+      kind: Deployment
+      name: sentiment-model
+    path: development-patch.yaml
+
+replicas:
+  - count: 1
+    name: sentiment-model
+
+configMapGenerator:
+  - name: dev-config
+    literals:
+      - LOG_LEVEL=DEBUG
+      - CACHE_TTL=60
+      - MAX_REQUESTS_PER_MINUTE=1000
+
