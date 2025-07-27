@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-warmup
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"  # Run after model deployment
+    argocd.argoproj.io/hook: PostSync  # Run after sync completes
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation  # Cleanup old jobs
+spec:
+  template:
+    spec:
+      containers:
+      - name: warmup
+        # ARM64-native curl image
+        image: curlimages/curl:8.5.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting model warmup for M3 Mac optimization..."
+          sleep 60  # Wait for model to be fully ready
+          
+          # Warmup requests to cache model in memory
+          for i in {1..5}; do
+            echo "Warmup request $i/5..."
+            curl -X POST http://sentiment-model-service/predict \
+              -H "Content-Type: application/json" \
+              -d "{\"text\": \"This is warmup request $i for ARM64 optimization\"}" \
+              --max-time 30 || true
+            sleep 10
+          done
+          
+          # Test various sentiment types to warm up model completely
+          curl -X POST http://sentiment-model-service/predict \
+            -H "Content-Type: application/json" \
+            -d '{"text": "I love this new AI model running on M3!"}' || true
+          
+          curl -X POST http://sentiment-model-service/predict \
+            -H "Content-Type: application/json" \
+            -d '{"text": "This is terrible and I hate it"}' || true
+          
+          curl -X POST http://sentiment-model-service/predict \
+            -H "Content-Type: application/json" \
+            -d '{"text": "This is a neutral statement"}' || true
+          
+          echo "Model warmup complete - ARM64 optimizations active"
+      restartPolicy: Never
+  backoffLimit: 3

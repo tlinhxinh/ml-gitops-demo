@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-model
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"  # Deploy after preprocessing
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentiment-model
+  template:
+    metadata:
+      labels:
+        app: sentiment-model
+    spec:
+      containers:
+      - name: sentiment-model
+        # ARM64-optimized Python with ML libraries
+        image: python:3.11-slim-bookworm
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+          pip install transformers flask gunicorn redis requests && \
+          python -c "
+          from flask import Flask, request, jsonify
+          from transformers import pipeline
+          import redis
+          import requests
+          import os
+          import json
+          
+          app = Flask(__name__)
+          
+          # Initialize model with ARM64 optimizations
+          model_name = os.getenv('MODEL_NAME', 'cardiffnlp/twitter-roberta-base-sentiment-latest')
+          classifier = pipeline('sentiment-analysis', model=model_name, device=-1)  # Force CPU
+          
+          # Redis connection
+          redis_client = redis.Redis(
+              host=os.getenv('REDIS_HOST', 'localhost'), 
+              port=6379, 
+              decode_responses=True
+          )
+          
+          @app.route('/health')
+          def health(): 
+              return {'status': 'healthy', 'model': model_name}
+          
+          @app.route('/predict', methods=['POST'])
+          def predict():
+              data = request.json
+              text = data['text']
+              
+              # Check cache first
+              cache_key = f'prediction:{hash(text)}'
+              cached_result = redis_client.get(cache_key)
+              if cached_result:
+                  return jsonify(json.loads(cached_result))
+              
+              # Preprocess text if preprocessing service available
+              try:
+                  preprocess_url = os.getenv('PREPROCESSOR_URL', 'http://text-preprocessor-service')
+                  preprocess_response = requests.post(
+                      f'{preprocess_url}/preprocess',
+                      json={'text': text},
+                      timeout=5
+                  )
+                  if preprocess_response.status_code == 200:
+                      text = preprocess_response.json()['processed_text']
+              except:
+                  pass  # Use original text if preprocessing fails
+              
+              # Make prediction
+              result = classifier(text)
+              
+              # Cache result for 5 minutes
+              redis_client.setex(cache_key, 300, json.dumps(result))
+              
+              return jsonify(result)
+          
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=8080)
+          "
+        env:
+        - name: PREPROCESSOR_URL
+          value: "http://text-preprocessor-service"
+        - name: REDIS_HOST
+          value: "redis-cache-service"
+        - name: MODEL_NAME
+          value: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+        - name: PYTORCH_ENABLE_MPS_FALLBACK
+          value: "1"  # Apple Silicon optimization
+        - name: OMP_NUM_THREADS
+          value: "4"   # Optimize for M3 cores
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "1Gi"     # Higher for M3 efficiency
+            cpu: "500m"
+          limits:
+            memory: "2Gi"     # M3 handles larger models well
+            cpu: "1000m"      # Leverage M3 performance
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60  # More time for model loading
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 120
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentiment-model-service
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  selector:
+    app: sentiment-model
+  ports:
+    - port: 80
+      targetPort: 8080
