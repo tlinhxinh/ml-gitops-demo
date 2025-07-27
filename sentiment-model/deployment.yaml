@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-model
+  labels:
+    app: sentiment-model
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentiment-model
+  template:
+    metadata:
+      labels:
+        app: sentiment-model
+        version: v1.0.0
+    spec:
+      containers:
+        - name: sentiment-model
+          image: python:3.11-slim-bookworm
+          command:
+            - /bin/bash
+            - -c
+            - |
+              pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+              pip install transformers flask gunicorn && \
+              python -c "
+              from flask import Flask, request, jsonify
+              from transformers import pipeline
+              import os
+              
+              app = Flask(__name__)
+              model_name = os.getenv('MODEL_NAME', 'cardiffnlp/twitter-roberta-base-sentiment-latest')
+              classifier = pipeline('sentiment-analysis', model=model_name)
+              
+              @app.route('/health')
+              def health(): return {'status': 'healthy'}
+              
+              @app.route('/predict', methods=['POST'])
+              def predict():
+                  data = request.json
+                  result = classifier(data['text'])
+                  return jsonify(result)
+              
+              if __name__ == '__main__':
+                  app.run(host='0.0.0.0', port=8080)
+              "
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MODEL_NAME
+              value: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+            - name: ENVIRONMENT
+              value: "development"
+            - name: PYTORCH_ENABLE_MPS_FALLBACK
+              value: "1"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /health
+            initialDelaySeconds: 60
+            periodSeconds: 10
