@@ -23,7 +23,7 @@ patches:
 
 replicas:
   - name: sentiment-model
-    count: 3
+    count: 2
 
 # Production-specific configurations
 configMapGenerator:
