@@ -1,0 +1,17 @@
+app:
+  name: my-simple-app
+  version: v1.0.0
+
+# Image settings
+image:
+  repository: nginx
+  tag: 1.21
+  pullPolicy: IfNotPresent
+
+# How many copies to run
+replicas: 2
+
+# Service settings
+service:
+  port: 80
+  type: ClusterIP

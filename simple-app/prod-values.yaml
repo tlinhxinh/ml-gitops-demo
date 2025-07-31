@@ -1,0 +1,15 @@
+# Production environment settings
+app:
+  name: my-app-prod
+  version: v1.0.0
+
+image:
+  repository: nginx
+  tag: 1.23
+  pullPolicy: IfNotPresent  # Use cached images in prod
+
+replicas: 3  # Multiple copies for reliability
+
+service:
+  port: 80
+  type: ClusterIP  # Internal access only

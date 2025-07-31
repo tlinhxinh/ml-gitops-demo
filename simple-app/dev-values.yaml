@@ -1,0 +1,15 @@
+# Development environment settings
+app:
+  name: my-app-dev
+  version: v1.0.0-dev
+
+image:
+  repository: nginx
+  tag: 1.21
+  pullPolicy: Always  # Always pull latest for dev
+
+replicas: 1  # Only one copy for dev
+
+service:
+  port: 80
+  type: NodePort  # Make it accessible from outside
